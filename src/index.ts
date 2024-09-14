@@ -36,5 +36,6 @@ export const useAPILoader = (
             ...config.options,
         },
     };
+
     return useNHentaiRepository(innerConfigurations);
 };
