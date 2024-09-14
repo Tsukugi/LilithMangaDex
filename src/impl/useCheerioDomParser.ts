@@ -1,4 +1,4 @@
-import { Cheerio, load } from "cheerio/slim";
+import { Cheerio, load } from "cheerio";
 import type { AnyNode } from "domhandler";
 import { UseDomParser, UseDomParserImpl } from "../interfaces/domParser";
 
