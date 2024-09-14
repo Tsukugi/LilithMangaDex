@@ -7,7 +7,7 @@
         "module": "esnext",
         "target": "esnext",
         "lib": ["ESNext", "dom"],
-        "moduleResolution": "node",
+        "moduleResolution": "Bundler",
         "outDir": "./dist",
         "rootDir": "./src",
         "esModuleInterop": true,

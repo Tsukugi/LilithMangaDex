@@ -1,59 +1,40 @@
 import {
-    CustomFetchInitOptions,
-    RepositoryTemplate,
-    UrlParamPair,
+    LilithHeaders,
+    CustomFetch,
+    RepositoryBase,
+    RepositoryBaseProps,
+    RepositoryBaseOptions,
+    LilithLanguage,
 } from "@atsu/lilith";
+import { useNHentaiRepository } from "./nhentai";
+import { UseDomParser } from "./interfaces/domParser";
+import { useCheerioDomParser } from "./impl/useCheerioDomParser";
+import { useNodeFetch } from "./impl/useNodeFetch";
 
-import { Result } from "./interfaces/fetch";
-import { useRequest } from "./utils/request";
+export interface APILoaderConfigurations {
+    headers?: Partial<LilithHeaders>;
+    fetch: CustomFetch;
+    domParser: UseDomParser;
+    options: Partial<RepositoryBaseOptions>;
+}
 
-import { useNHentaiGetBookmethod } from "./methods/getBook";
-import { useNHentaiGetChapterMethod } from "./methods/getChapter";
-import { useNHentaiSearchMethod } from "./methods/search";
-import { useNHentaiGetRandomBookMethod } from "./methods/getRandomBook";
-import { useNHentaiGetLatestBooksMethod } from "./methods/latest";
-import { UseNHentaiMethodProps } from "./interfaces";
-import { useNHentaiGetTrendingBooksMethod } from "./methods/getTrendingBooks";
-
-export const useNHentaiRepository: RepositoryTemplate = (props) => {
-    const { headers } = props;
-    const { doRequest } = useRequest(props);
-
-    const baseUrl = "https://nhentai.net";
-    const apiUrl = "https://nhentai.net/api";
-    const imgBaseUrl = "https://i.nhentai.net/galleries";
-    const tinyImgBaseUrl = imgBaseUrl.replace("/i.", "/t.");
-
-    const request = async <T>(
-        url: string,
-        params: UrlParamPair[] = [],
-    ): Promise<Result<T>> => {
-        const requestOptions: CustomFetchInitOptions = {
-            method: "GET",
-            headers: {
-                cookie: headers.cookie,
-                "User-Agent": headers["User-Agent"],
-            },
-            credentials: "include",
-        };
-
-        return doRequest(url, params, requestOptions);
+export const useAPILoader = (
+    config: Partial<APILoaderConfigurations>,
+): RepositoryBase => {
+    const innerConfigurations: RepositoryBaseProps = {
+        fetch: useNodeFetch,
+        domParser: useCheerioDomParser,
+        ...config,
+        options: {
+            debug: false,
+            requiredLanguages: [
+                LilithLanguage.english,
+                LilithLanguage.japanese,
+                LilithLanguage.mandarin,
+                LilithLanguage.spanish,
+            ],
+            ...config.options,
+        },
     };
-
-    const domains = { baseUrl, imgBaseUrl, apiUrl, tinyImgBaseUrl };
-    const methodProps: UseNHentaiMethodProps = {
-        ...props,
-        domains,
-        request,
-    };
-
-    return {
-        domains,
-        getChapter: useNHentaiGetChapterMethod(methodProps),
-        getBook: useNHentaiGetBookmethod(methodProps),
-        search: useNHentaiSearchMethod(methodProps),
-        getRandomBook: useNHentaiGetRandomBookMethod(methodProps),
-        getLatestBooks: useNHentaiGetLatestBooksMethod(methodProps),
-        getTrendingBooks: useNHentaiGetTrendingBooksMethod(methodProps),
-    };
+    return useNHentaiRepository(innerConfigurations);
 };
