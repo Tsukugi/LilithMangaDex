@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, test } from "@jest/globals";
 import { RepositoryBase } from "@atsu/lilith";
 
 import { headers, TextMocksForDomParser, fetchMock } from "../nhentaiMock";
-import { useAPILoader } from "../../src/index";
+import { useLilithNHentai } from "../../src/loader";
 import { useLilithLog } from "../../src/utils/log";
 
 const debug = false;
@@ -12,7 +12,7 @@ const { log, warn } = useLilithLog(debug);
 describe("DOMLoader", () => {
     let loader: RepositoryBase = {} as RepositoryBase;
     beforeEach(() => {
-        loader = useAPILoader({
+        loader = useLilithNHentai({
             headers,
             fetch: () => fetchMock({}, TextMocksForDomParser.Search),
             options: { debug },
@@ -30,7 +30,7 @@ describe("DOMLoader", () => {
     });
 
     test("Custom fetch for text", async () => {
-        const randomLoader = useAPILoader({
+        const randomLoader = useLilithNHentai({
             headers,
             fetch: () => fetchMock({}, TextMocksForDomParser.Random),
         });
