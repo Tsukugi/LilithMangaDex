@@ -1,115 +1,157 @@
 import {
-    LilithError,
-    LilithTag,
-    LilithLanguage,
     GetBook,
     Book,
+    GetBookOptions,
+    LilithError,
+    UrlParamPair,
+    LilithTag,
 } from "@atsu/lilith";
-import {
-    NHentaiImageExtension,
-    NHentaiResult,
-    UseNHentaiMethodProps,
-} from "../interfaces";
 import { useLilithLog } from "../utils/log";
-import { useNHentaiMethods } from "./base";
+import { useRangeFinder } from "../utils/range";
+import { useMangaDexMethod } from "./base";
+import {
+    MangaDexAuthor,
+    MangaDexBook,
+    MangaDexChapter,
+    MangaDexCoverArt,
+    MangadexResult,
+    UseMangaDexMethodProps,
+} from "../interfaces";
 
-/**
- * Hook for interacting with NHentai books.
- * @param {UseNHentaiMethodProps} props - Properties required for the hook.
- * @returns {GetBook} - A function that retrieves information about a book based on its identifier.
- */
-export const useNHentaiGetBookmethod = (
-    props: UseNHentaiMethodProps,
+export const useMangaDexGetBookMethod = (
+    props: UseMangaDexMethodProps,
 ): GetBook => {
     const {
-        domains: { apiUrl },
+        domains: { apiUrl, tinyImgBaseUrl },
         options: { debug, requiredLanguages },
         request,
     } = props;
 
-    const { LanguageMapper, getLanguageFromTags, getImageUri } =
-        useNHentaiMethods();
+    const {
+        ImageSize,
+        RelationshipTypes,
+        ReverseLanguageMapper,
+        getSupportedTranslations,
+        findFirstTranslatedValue,
+    } = useMangaDexMethod(props.domains);
 
-    /**
-     * Retrieves information about a book based on its identifier.
-     * @param {string} id - The unique identifier of the book.
-     * @param {LilithLanguage[]} [requiredLanguages] - Optional array of required languages.
-     * @returns {Promise<Book>} - A Promise that resolves to the retrieved book.
-     * @throws {LilithError} - Throws an error if the book is not found or no translation is available for the requested language.
-     */
-    return async (id: string): Promise<Book> => {
-        const response = await request<NHentaiResult>(
-            `${apiUrl}/gallery/${id}`,
+    return async (identifier, options = {}): Promise<Book | null> => {
+        const innerOptions: GetBookOptions = {
+            ...options,
+            chapterList: {
+                page: 1,
+                size: 100,
+                orderBy: "desc",
+                ...options.chapterList,
+            },
+        };
+
+        const manga = await request<MangadexResult<MangaDexBook>>(
+            `${apiUrl}/manga/${identifier}`,
+            [
+                ["includes[]", RelationshipTypes.coverArt],
+                ["includes[]", RelationshipTypes.author],
+            ],
         );
 
-        if (!response || response?.statusCode !== 200) {
-            throw new LilithError(response?.statusCode, "No book found");
+        if (!manga || manga?.statusCode !== 200) {
+            throw new LilithError(manga?.statusCode, "No manga found");
         }
 
-        const book = await response.json();
+        const mangaResult = await manga.json();
 
-        const tags: LilithTag[] = [];
+        const { tags, title, availableTranslatedLanguages } =
+            mangaResult.data.attributes;
 
-        let author = "unknown";
-        book.tags.forEach((tag) => {
-            if (tag.type === "author" && author === "unknown") {
-                author = tag.name; // Get the first author
-            }
-            if (tag.type === "tag") {
-                tags.push({
-                    id: `${tag.id}`,
-                    name: tag.name,
-                });
-            }
-        });
-
-        const lilithLanguage: LilithLanguage =
-            LanguageMapper[getLanguageFromTags(book.tags)];
-
-        const matchesTranslation = requiredLanguages.includes(lilithLanguage);
-        useLilithLog(debug).log({
+        const supportedTranslations = getSupportedTranslations(
             requiredLanguages,
-            lilithLanguage,
-            matchesTranslation,
-            tags: book.tags.map((tag) => [tag.type, tag.name]),
+            availableTranslatedLanguages,
+        );
+
+        const pageSize = innerOptions.chapterList.size;
+        const { pageToRange } = useRangeFinder({ pageSize });
+        const { startIndex } = pageToRange(innerOptions.chapterList.page);
+
+        useLilithLog(debug).log({
+            supportedTranslations,
+            availableTranslatedLanguages,
+            pageSize,
+            startIndex,
         });
 
-        if (!matchesTranslation) {
-            throw new LilithError(
-                404,
-                `No translation for the requested language available, retrieved: ${lilithLanguage}`,
-            );
+        const languageParams: UrlParamPair[] = supportedTranslations.map(
+            (lang) => ["translatedLanguage[]", lang],
+        );
+
+        const feed = await request<MangadexResult<MangaDexChapter[]>>(
+            `${apiUrl}/manga/${identifier}/feed`,
+            [
+                ["limit", pageSize],
+                ["offset", startIndex],
+                ["order[chapter]", innerOptions.chapterList.orderBy],
+                ...languageParams,
+            ],
+        );
+
+        if (!feed || feed?.statusCode !== 200) {
+            throw new LilithError(feed?.statusCode, "No manga feed found");
         }
 
-        const { english, japanese, pretty } = book.title;
+        const chaptersResult = await feed.json();
+
+        const relationships: Record<string, unknown> = (() => {
+            const res = {};
+            mangaResult.data.relationships.forEach((rel) => {
+                res[rel.type] = rel.attributes;
+            });
+            return res;
+        })();
+
+        const { fileName } = relationships[
+            RelationshipTypes.coverArt
+        ] as MangaDexCoverArt;
+        const { name } = relationships[
+            RelationshipTypes.author
+        ] as MangaDexAuthor;
+
+        if (!fileName) throw new LilithError(404, "No cover found");
+
+        const lilithTags: LilithTag[] = tags.map((tag) => ({
+            id: tag.id,
+            name: findFirstTranslatedValue(tag.attributes.name),
+        }));
+
+        const cover = {
+            uri: `${tinyImgBaseUrl}/${mangaResult.data.id}/${fileName}.${ImageSize}.jpg`,
+        };
 
         return {
-            title: english || japanese || pretty,
-            id: `${book.id}`,
-            author,
-            tags,
-            cover: {
-                uri: getImageUri({
-                    type: "cover",
-                    mediaId: book.media_id,
-                    imageExtension: NHentaiImageExtension[book.images.cover.t],
-                    domains: props.domains,
-                }),
-                width: book.images.cover.w,
-                height: book.images.cover.h,
-            },
-            // NHentai always provides 1 chapter books
-            chapters: [
-                {
-                    id: `${book.id}`,
-                    title:
-                        book.title[getLanguageFromTags(book.tags)] ||
-                        book.title.pretty,
-                    language: lilithLanguage,
-                    chapterNumber: 1,
-                },
-            ],
-            availableLanguages: [lilithLanguage],
+            id: identifier,
+            title: findFirstTranslatedValue(title),
+            author: name,
+            chapters: chaptersResult.data
+                .filter((chapter) =>
+                    supportedTranslations.includes(
+                        chapter.attributes.translatedLanguage,
+                    ),
+                )
+                .map((chapter) => ({
+                    id: chapter.id,
+                    title: chapter.attributes.title,
+                    /// It is safe to find as we filter out the non supported
+                    language:
+                        ReverseLanguageMapper[
+                            chapter.attributes.translatedLanguage
+                        ],
+
+                    chapterNumber: +chapter.attributes.chapter,
+                })),
+            cover,
+            tags: lilithTags,
+            availableLanguages:
+                mangaResult.data.attributes.availableTranslatedLanguages
+                    .filter((lang) => supportedTranslations.includes(lang))
+                    .map((lang) => ReverseLanguageMapper[lang]),
         };
     };
 };

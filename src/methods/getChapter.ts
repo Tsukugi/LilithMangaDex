@@ -1,70 +1,66 @@
 import { GetChapter, Chapter, LilithError } from "@atsu/lilith";
-import {
-    NHentaiImageExtension,
-    NHentaiResult,
-    UseNHentaiMethodProps,
-} from "../interfaces";
+
 import { useLilithLog } from "../utils/log";
-import { useNHentaiMethods } from "./base";
+import { useMangaDexMethod } from "./base";
+import {
+    UseMangaDexMethodProps,
+    MangaDexImageListResult,
+    MangadexResult,
+    MangaDexChapter,
+} from "../interfaces";
 
 /**
- * Hook for interacting with NHentai chapters.
- * @param {UseNHentaiMethodProps} props - Properties required for the hook.
+ * Hook for interacting with MangaDex chapters.
+ * @param {UseMangaDexMethodProps} props - Properties required for the hook.
  * @returns {GetChapter} - A function that retrieves information about a chapter based on its identifier.
  */
-export const useNHentaiGetChapterMethod = (
-    props: UseNHentaiMethodProps,
+export const useMangaDexGetChapterMethod = (
+    props: UseMangaDexMethodProps,
 ): GetChapter => {
     const {
-        domains: { apiUrl },
+        domains: { apiUrl, imgBaseUrl },
         options: { debug },
         request,
     } = props;
-    const { LanguageMapper, getLanguageFromTags, getImageUri } =
-        useNHentaiMethods();
 
-    /**
-     * Retrieves information about a chapter based on its identifier.
-     * @param {string} chapterId - The unique identifier of the chapter.
-     * @returns {Promise<Chapter>} - A Promise that resolves to the retrieved chapter.
-     * @throws {LilithError} - Throws an error if the chapter is not found.
-     */
-    return async (chapterId: string): Promise<Chapter> => {
-        /**
-         * NHentai doesn't use chapters; it directly gets the pages from the book as 1 chapter books.
-         */
-        const response = await request<NHentaiResult>(
-            `${apiUrl}/gallery/${chapterId}`,
+    const { ReverseLanguageMapper } = useMangaDexMethod(props.domains);
+
+    return async (identifier: string): Promise<Chapter | null> => {
+        const response = await request<MangaDexImageListResult>(
+            `${apiUrl}/at-home/server/${identifier}`,
         );
 
         if (!response || response?.statusCode !== 200) {
-            throw new LilithError(response?.statusCode, "No chapter found");
+            throw new LilithError(
+                response?.statusCode,
+                "No chapter images found",
+            );
         }
 
-        const book = await response.json();
+        const chapter = await request<MangadexResult<MangaDexChapter>>(
+            `${apiUrl}/chapter/${identifier}`,
+        );
 
-        useLilithLog(debug).log({
-            language: LanguageMapper[getLanguageFromTags(book.tags)],
-        });
+        if (!chapter || chapter?.statusCode !== 200) {
+            throw new LilithError(response?.statusCode, "No chapter found");
+        }
+        const imagesResult = await response.json();
+        const chapterResult = await chapter.json();
+
+        useLilithLog(debug).log({ chapter: chapterResult.data.attributes });
 
         return {
-            id: chapterId,
-            pages: book.images.pages.map((page, index) => ({
-                uri: getImageUri({
-                    type: "page",
-                    mediaId: book.media_id,
-                    imageExtension:
-                        NHentaiImageExtension[book.images.thumbnail.t],
-                    pageNumber: index + 1,
-                    domains: props.domains,
-                }),
-                width: page.w,
-                height: page.h,
+            id: identifier,
+            pages: imagesResult.chapter.data.map((filename) => ({
+                uri: `${imgBaseUrl}/${imagesResult.chapter.hash}/${filename}`,
             })),
-            language: LanguageMapper[getLanguageFromTags(book.tags)],
-            title:
-                book.title[getLanguageFromTags(book.tags)] || book.title.pretty,
-            chapterNumber: 1,
+
+            title: chapterResult.data.attributes.title,
+            language:
+                ReverseLanguageMapper[
+                    chapterResult.data.attributes.translatedLanguage
+                ],
+            chapterNumber: +chapterResult.data.attributes.chapter,
         };
     };
 };

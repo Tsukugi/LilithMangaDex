@@ -1,86 +1,64 @@
 import {
     GetLatestBooks,
     BookListResults,
+    UrlParamPair,
     LilithError,
-    BookBase,
-    LilithImage,
 } from "@atsu/lilith";
+import { useLilithLog } from "../utils/log";
+import { useRangeFinder } from "../utils/range";
+import { MaxLatestBooksSize, useMangaDexMethod } from "./base";
 import {
-    NHentaiImageExtension,
-    NHentaiPaginateResult,
-    UseNHentaiMethodProps,
+    UseMangaDexMethodProps,
+    MangadexResult,
+    MangaDexBook,
 } from "../interfaces";
-import { useNHentaiMethods } from "./base";
 
 /**
- * Custom hook for fetching the latest NHentai books using the provided options and methods.
+ * Custom hook for fetching the latest MangaDex books using the provided options and methods.
  *
- * @param {UseNHentaiMethodProps} props - The options and methods needed for NHentai latest book retrieval.
+ * @param {UseMangaDexMethodProps} props - The options and methods needed for MangaDex latest book retrieval.
  * @returns {GetLatestBooks} - The function for fetching the latest books.
  */
-export const useNHentaiGetLatestBooksMethod = (
-    props: UseNHentaiMethodProps,
+export const useMangaDexGetLatestBooksMethod = (
+    props: UseMangaDexMethodProps,
 ): GetLatestBooks => {
     const {
         domains: { apiUrl },
+        options: { debug, requiredLanguages },
         request,
     } = props;
-    const { LanguageMapper, getLanguageFromTags, getImageUri } =
-        useNHentaiMethods();
 
-    /**
-     * Function for fetching the latest NHentai books for a specific page.
-     *
-     * @param {number} page - The page number for pagination.
-     * @returns {Promise<BookListResults>} - The pagination result containing the latest books.
-     */
+    const { getLanguageParams, getBookResults, RelationshipTypes } =
+        useMangaDexMethod(props.domains);
+
     return async (page: number): Promise<BookListResults> => {
-        // Making a request to the NHentai API for the latest books
-        const response = await request<NHentaiPaginateResult>(
-            `${apiUrl}/galleries/all?page=${page}`,
+        const languageParams: UrlParamPair[] =
+            getLanguageParams(requiredLanguages);
+
+        const pageSize = MaxLatestBooksSize;
+        const { pageToRange } = useRangeFinder({ pageSize });
+        const { startIndex } = pageToRange(page);
+
+        const response = await request<MangadexResult<MangaDexBook[]>>(
+            `${apiUrl}/manga`,
+            [
+                ["limit", pageSize],
+                ["offset", startIndex],
+                ["includes[]", RelationshipTypes.coverArt],
+                ...languageParams,
+            ],
         );
 
-        if (response.statusCode !== 200) {
-            throw new LilithError(
-                response.statusCode,
-                "Could not find a correct pagination",
-            );
+        const result = await response.json();
+
+        if (!response || response?.statusCode !== 200) {
+            throw new LilithError(response?.statusCode, "No search results");
         }
+        useLilithLog(debug).log({ response });
 
-        const data = await response.json();
-        const numPages = data.num_pages || 0;
-        const perPageEntries = data.per_page || 0;
-        const totalResults = numPages * perPageEntries;
-
-        // Mapping the response data to book objects
-        const books: BookBase[] = (data.result || []).map((result) => {
-            const cover = result.images.cover;
-            const coverImage: LilithImage = {
-                uri: getImageUri({
-                    type: "cover",
-                    mediaId: result.media_id,
-                    imageExtension: NHentaiImageExtension[cover.t],
-                    domains: props.domains,
-                }),
-                width: cover.w,
-                height: cover.h,
-            };
-            return {
-                id: `${result.id}`,
-                title: result.title.english,
-                cover: coverImage,
-                availableLanguages: [
-                    LanguageMapper[getLanguageFromTags(result.tags)],
-                ],
-            };
-        });
-
-        // Constructing and returning the pagination result
         return {
             page,
-            totalResults,
-            totalPages: numPages,
-            results: books,
+            results: getBookResults(result.data, requiredLanguages),
         };
     };
 };

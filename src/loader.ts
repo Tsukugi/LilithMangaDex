@@ -6,7 +6,7 @@ import {
     RepositoryBaseOptions,
     LilithLanguage,
 } from "@atsu/lilith";
-import { useNHentaiRepository } from "./nhentai";
+import { useMangaDexRepository } from "./MangaDex";
 import { UseDomParser } from "./interfaces/domParser";
 import { useCheerioDomParser } from "./impl/useCheerioDomParser";
 import { useNodeFetch } from "./impl/useNodeFetch";
@@ -18,7 +18,7 @@ export interface APILoaderConfigurations {
     options: Partial<RepositoryBaseOptions>;
 }
 
-export const useLilithNHentai = (
+export const useLilithMangaDex = (
     config: Partial<APILoaderConfigurations>,
 ): RepositoryBase => {
     const innerConfigurations: RepositoryBaseProps = {
@@ -37,5 +37,5 @@ export const useLilithNHentai = (
         },
     };
 
-    return useNHentaiRepository(innerConfigurations);
+    return useMangaDexRepository(innerConfigurations);
 };

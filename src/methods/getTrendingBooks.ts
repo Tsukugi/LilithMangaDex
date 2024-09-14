@@ -1,40 +1,63 @@
 import { GetTrendingBooks, BookBase } from "@atsu/lilith";
-import { UseNHentaiMethodProps } from "../interfaces";
+
 import { useLilithLog } from "../utils/log";
-import { useNHentaiMethods } from "./base";
+import { UseMangaDexMethodProps } from "../interfaces";
+// import { useMangaDexMethod } from "./base";
 
 /**
- * Custom hook for fetching the latest NHentai books using the provided options and methods.
+ * Custom hook for fetching the latest MangaDex books using the provided options and methods.
  *
- * @param {UseNHentaiMethodProps} props - The options and methods needed for NHentai latest book retrieval.
+ * @param {UseMangaDexMethodProps} props - The options and methods needed for MangaDex latest book retrieval.
  * @returns {GetTrendingBooks} - The function for fetching the latest books.
  */
-export const useNHentaiGetTrendingBooksMethod = (
-    props: UseNHentaiMethodProps,
+export const useMangaDexGetTrendingBooksMethod = (
+    props: UseMangaDexMethodProps,
 ): GetTrendingBooks => {
-    const {
-        domains: { baseUrl },
-        options: { debug, requiredLanguages },
-        request,
-    } = props;
+    // const {
+    //     domains: { baseUrl, apiUrl },
+    //     options: { debug, requiredLanguages },
+    //     request,
+    // } = props;
 
-    const { getGalleries } = useNHentaiMethods();
+    // const { getBookResults, RelationshipTypes } = useMangaDexMethod(
+    //     props.domains,
+    // );
+
+    /**
+     * TODO implement this
+     *! Mangadex doesnt support providing Trending books in their API.
+     *! And scrapping cannot be done atm, due of it using Nuxt js,
+     *! therefore the domParserImpl can't reliably
+     *! get the necessary elements after the initial load.
+     */
     return async (): Promise<BookBase[]> => {
-        const response = await request(`${baseUrl}`);
+        // const response = await request(`${baseUrl}`);
+        // const mangaResponse = await request<MangadexResult<MangaDexBook[]>>(
+        //     `${apiUrl}/manga`,
+        //     [["includes[]", RelationshipTypes.coverArt]],
+        // );
+        // const document = await response.getDocument();
+        // const mangaResult = await mangaResponse.json();
 
-        const document = await response.getDocument();
+        // const idList = document
+        //     .findAll("div.swiper div.swiper-slide > a")
+        //     .map((element) => element.getAttribute("href"));
 
-        const popularGalleriesContainerSelector =
-            "div.container.index-container.index-popular";
+        // const mangaDexBooks: MangaDexBook[] = mangaResult.data.filter(
+        //     (mangaDexBook) => idList.includes(mangaDexBook.id),
+        // );
 
-        const galleries = getGalleries(
-            document,
-            requiredLanguages,
-            popularGalleriesContainerSelector,
-        );
+        // useLilithLog(true).log({ mangaResult });
 
-        useLilithLog(debug).log({ galleries });
+        // const books: BookBase[] = getBookResults(
+        //     mangaDexBooks,
+        //     requiredLanguages,
+        // );
 
-        return galleries;
+        // useLilithLog(debug).log({ books });
+
+        useLilithLog(props.options.debug);
+
+        return [];
     };
 };

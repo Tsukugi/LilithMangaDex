@@ -1,1 +1,1 @@
-export { useLilithNHentai } from "./loader";
+export { useLilithMangaDex } from "./loader";
